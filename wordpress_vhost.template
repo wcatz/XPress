@@ -1,0 +1,61 @@
+server {
+  server_name www.DOMAIN DOMAIN;
+ 
+  root ROOT/htdocs/;
+ 
+  access_log /var/log/nginx/DOMAIN.access.log;
+  error_log /var/log/nginx/DOMAIN.error.log;
+  index index.php;
+
+	set $no_cache 0;
+
+	# POST requests and urls with a query string should always go to PHP
+	if ($request_method = POST) {
+		set $no_cache 1;
+	}   
+	if ($query_string != "") {
+		set $no_cache 1;
+	}   
+
+	# Don't cache uris containing the following segments
+	if ($request_uri ~* "(/wp-admin/|/xmlrpc.php|/wp-(app|cron|login|register|mail).php|wp-.*.php|/feed/|index.php|wp-comments-popup.php|wp-links-opml.php|wp-locations.php|sitemap(_index)?.xml|[a-z0-9_-]+-sitemap([0-9]+)?.xml)") {
+		set $no_cache 1;
+	}   
+
+	# Don't use the cache for logged in users or recent commenters
+	if ($http_cookie ~* "comment_author|wordpress_[a-f0-9]+|wp-postpass|wordpress_no_cache|wordpress_logged_in") {
+		set $no_cache 1;
+	}
+
+	location / {
+		try_files $uri $uri/ /index.php?$args;
+	}    
+
+	location ~ .php$ {
+		try_files $uri /index.php; 
+		include fastcgi_params;
+		fastcgi_pass unix:/var/run/php5-fpm.sock;
+
+		fastcgi_cache_bypass $no_cache;
+	        fastcgi_no_cache $no_cache;
+
+		fastcgi_cache WORDPRESS;
+		fastcgi_cache_valid  60m;
+	}
+
+	location ~ /purge(/.*) {
+	    fastcgi_cache_purge WORDPRESS "$scheme$request_method$host$1";
+	}	
+
+	location ~* ^.+\.(ogg|ogv|svg|svgz|eot|otf|woff|mp4|ttf|rss|atom|jpg|jpeg|gif|png|ico|zip|tgz|gz|rar|bz2|doc|xls|exe|ppt|tar|mid|midi|wav|bmp|rtf)$ {
+		access_log off;	log_not_found off; expires max;
+	}
+
+	location = /favicon.php { access_log off; log_not_found off; }
+	location = /robots.txt { access_log off; log_not_found off; }
+	location ~ /\. { deny  all; access_log off; log_not_found off; }
+
+    # sitemap rewrite for yoast seo plugin xml sitemaps
+	               rewrite ^/sitemap_index\.xml$ /index.php?sitemap=1 last;
+                   rewrite ^/([^/]+?)-sitemap([0-9]+)?\.xml$ /index.php?sitemap=$1&sitemap_n=$2 last;	
+	}
